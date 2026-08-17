@@ -734,6 +734,52 @@ let items = [
 ];
 let logoDataURL = null;
 let sigDataURL = null;
+const STORAGE_KEY = "invoice-generator-draft-v1";
+const FORM_FIELD_IDS = [
+  "sellerType", "sellerName", "sellerAddress", "sellerContact", "invNumber", "invDate",
+  "toLine1", "toLine2", "toLine3", "signerName"
+];
+
+function renderImagePreviews() {
+  document.getElementById("logoBox").innerHTML = logoDataURL
+    ? `<img src="${logoDataURL}" />`
+    : '<div class="inv-logo-placeholder">Logo</div>';
+  document.getElementById("sigBox").innerHTML = sigDataURL ? `<img src="${sigDataURL}" />` : "";
+}
+
+function saveForm() {
+  const fields = Object.fromEntries(FORM_FIELD_IDS.map(id => [id, document.getElementById(id).value]));
+  const draft = { fields, items, logoDataURL, sigDataURL };
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
+  } catch (error) {
+    // Images can exceed the browser's local-storage limit. Keep the invoice data even then.
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...draft, logoDataURL: null, sigDataURL: null }));
+      showStatus("Data invoice tersimpan, tetapi gambar logo/tanda tangan terlalu besar untuk disimpan.", "error");
+    } catch (fallbackError) {
+      console.warn("Could not save invoice draft:", fallbackError);
+    }
+  }
+}
+
+function restoreSavedForm() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (!saved || typeof saved !== "object") return;
+
+    FORM_FIELD_IDS.forEach(id => {
+      if (typeof saved.fields?.[id] === "string") document.getElementById(id).value = saved.fields[id];
+    });
+    if (Array.isArray(saved.items) && saved.items.length) items = saved.items;
+    logoDataURL = typeof saved.logoDataURL === "string" ? saved.logoDataURL : null;
+    sigDataURL = typeof saved.sigDataURL === "string" ? saved.sigDataURL : null;
+    renderImagePreviews();
+  } catch (error) {
+    console.warn("Could not restore saved invoice draft:", error);
+  }
+}
 
 function terbilang(n) {
   if (n === 0) return "Nol";
@@ -865,6 +911,7 @@ function renderPreview() {
 
   document.getElementById("pTerbilang").textContent = terbilang(total);
   document.getElementById("totalDisplay").textContent = `Total: Rp ${fmt(total)}`;
+  saveForm();
 }
 
 document.getElementById("logoFile").addEventListener("change", (e) => {
@@ -873,7 +920,8 @@ document.getElementById("logoFile").addEventListener("change", (e) => {
   const reader = new FileReader();
   reader.onload = (ev) => {
     logoDataURL = ev.target.result;
-    document.getElementById("logoBox").innerHTML = `<img src="${logoDataURL}" />`;
+    renderImagePreviews();
+    saveForm();
   };
   reader.readAsDataURL(file);
 });
@@ -883,7 +931,8 @@ document.getElementById("sigFile").addEventListener("change", (e) => {
   const reader = new FileReader();
   reader.onload = (ev) => {
     sigDataURL = ev.target.result;
-    document.getElementById("sigBox").innerHTML = `<img src="${sigDataURL}" />`;
+    renderImagePreviews();
+    saveForm();
   };
   reader.readAsDataURL(file);
 });
@@ -1103,6 +1152,7 @@ function downloadPDF() {
   }
 }
 
+restoreSavedForm();
 renderItemsForm();
 renderPreview();
 
